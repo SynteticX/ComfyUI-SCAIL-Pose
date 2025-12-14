@@ -146,7 +146,7 @@ def collect_smpl_poses_samurai(data):
 
 
 
-def render_nlf_as_images(smpl_poses, dw_poses, height, width, video_length, intrinsic_matrix=None, draw_2d=True):
+def render_nlf_as_images(smpl_poses, dw_poses, height, width, video_length, intrinsic_matrix=None, draw_2d=True, draw_face=True, draw_hands=True):
     """ return a list of images """
 
     base_colors_255_dict = {
@@ -244,7 +244,7 @@ def render_nlf_as_images(smpl_poses, dw_poses, height, width, video_length, intr
 
     frames_np_rgba = render_whole(cylinder_specs_list, H=height, W=width, fx=focal_x, fy=focal_y, cx=princpt[0], cy=princpt[1])
     if dw_poses is not None and draw_2d:
-        canvas_2d = draw_pose_to_canvas_np(aligned_poses, pool=None, H=height, W=width, reshape_scale=0, show_feet_flag=False, show_body_flag=False, show_cheek_flag=True, dw_hand=True)
+        canvas_2d = draw_pose_to_canvas_np(aligned_poses, pool=None, H=height, W=width, reshape_scale=0, show_feet_flag=False, show_body_flag=False, show_cheek_flag=True, dw_hand=True, show_face_flag=draw_face, show_hand_flag=draw_hands)
 
         for i in range(len(frames_np_rgba)):
             frame_img = frames_np_rgba[i]
