@@ -3,8 +3,6 @@ import numpy as np
 import random
 import math
 
-ti.init(arch=ti.cuda)
-
 def flatten_specs(specs_list):
     """把 specs_list 拉平为 numpy 数组 + 索引表"""
     starts, ends, colors = [], [], []

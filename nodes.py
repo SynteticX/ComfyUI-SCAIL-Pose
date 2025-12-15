@@ -166,6 +166,7 @@ class RenderNLFPoses:
                 "ref_dw_pose": ("DWPOSES", {"default": None, "tooltip": "Optional reference DW pose model for alignment"}),
                 "draw_face": ("BOOLEAN", {"default": True, "tooltip": "Whether to draw face keypoints"}),
                 "draw_hands": ("BOOLEAN", {"default": True, "tooltip": "Whether to draw hand keypoints"}),
+                "render_device": (["gpu", "cpu", "opengl", "cuda", "vulkan", "metal"], {"default": "gpu", "tooltip": "Taichi device to use for rendering"}),
             }
     }
 
@@ -174,10 +175,22 @@ class RenderNLFPoses:
     FUNCTION = "predict"
     CATEGORY = "WanVideoWrapper"
 
-    def predict(self, nlf_poses, width, height, dw_poses=None, ref_dw_pose=None, draw_face=True, draw_hands=True):
+    def predict(self, nlf_poses, width, height, dw_poses=None, ref_dw_pose=None, draw_face=True, draw_hands=True, render_device="gpu"):
 
         from .NLFPoseExtract.nlf_render import render_nlf_as_images, render_multi_nlf_as_images, shift_dwpose_according_to_nlf, process_data_to_COCO_format, intrinsic_matrix_from_field_of_view
         from .NLFPoseExtract.align3d import solve_new_camera_params_central, solve_new_camera_params_down
+        import taichi as ti
+
+        device_map = {
+            "cpu": ti.cpu,
+            "gpu": ti.gpu,
+            "opengl": ti.opengl,
+            "cuda": ti.cuda,
+            "vulkan": ti.vulkan,
+            "metal": ti.metal,
+        }
+
+        ti.init(arch=device_map.get(render_device.lower()))
 
         if isinstance(nlf_poses, dict):
             pose_input = nlf_poses['joints3d_nonparam'][0] if 'joints3d_nonparam' in nlf_poses else nlf_poses
