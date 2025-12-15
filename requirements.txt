@@ -1,5 +1,3 @@
 taichi
-trimesh
 opencv-python
-matplotlib
 pillow

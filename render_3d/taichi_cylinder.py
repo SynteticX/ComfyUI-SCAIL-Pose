@@ -4,7 +4,7 @@ import random
 import math
 
 def flatten_specs(specs_list):
-    """把 specs_list 拉平为 numpy 数组 + 索引表"""
+    """Flatten specs_list into numpy arrays + index tables"""
     starts, ends, colors = [], [], []
     frame_offset, frame_count = [], []
     offset = 0
@@ -32,7 +32,7 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
     z_min = min(starts[:, 2].min(), ends[:, 2].min())
     z_max = max(starts[:, 2].max(), ends[:, 2].max())
 
-    # ========= 相机内参 =========
+    # ========= Camera intrinsics =========
     znear = 0.1
     zfar = max(min(z_max, 25000), 10000)
     C = ti.Vector([0.0, 0.0, 0.0])  # 相机中心
@@ -41,17 +41,17 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
     c_start = ti.Vector.field(3, dtype=ti.f32, shape=total_cyl)
     c_end   = ti.Vector.field(3, dtype=ti.f32, shape=total_cyl)
     c_rgba  = ti.Vector.field(4, dtype=ti.f32, shape=total_cyl)
-    n_cyl   = ti.field(dtype=ti.i32, shape=())  # 实际数量
+    #n_cyl   = ti.field(dtype=ti.i32, shape=())  # Actual count
     f_offset = ti.field(dtype=ti.i32, shape=n_frames)
     f_count  = ti.field(dtype=ti.i32, shape=n_frames)
-    frame_id = ti.field(dtype=ti.i32, shape=())  # 当前帧号
+    frame_id = ti.field(dtype=ti.i32, shape=())  # Current frame id
     z_min_field = ti.field(dtype=ti.f32, shape=())
     z_max_field = ti.field(dtype=ti.f32, shape=())
 
     z_min_field[None] = z_min
     z_max_field[None] = z_max
 
-    # # ====== 拷贝数据一次 ======
+    # # ====== Copy data once ======
     c_start.from_numpy(starts)
     c_end.from_numpy(ends)
     c_rgba.from_numpy(colors)
@@ -78,10 +78,10 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
     def scene_sdf(p):
         best_d = 1e6
         best_col = ti.Vector([0.0, 0.0, 0.0, 0.0])
-        fid = frame_id[None]  # 从 field 里读出来，变成一个普通 int
+        fid = frame_id[None]  # Read from field, becomes a regular int
         off = f_offset[fid]
         cnt = f_count[fid]
-        for i in range(cnt):  # 只遍历实际数量
+        for i in range(cnt):  # Only iterate actual count
             a = c_start[off + i]
             b = c_end[off + i]
             r = radius
@@ -113,7 +113,7 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
 
     @ti.kernel
     def render():
-        depth_near, depth_far = ti.max(z_min_field[None], 0.1), ti.min(z_max_field[None] + 6000, 20000)  # 能渲染出来的点，最大12000
+        depth_near, depth_far = ti.max(z_min_field[None], 0.1), ti.min(z_max_field[None] + 6000, 20000)  # Points that can be rendered, max 12000
         for y, x in img:
             ro, rd = pixel_to_ray(x, y)
             t = znear
@@ -131,19 +131,19 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
                     n = get_normal(p)
                     diff = max(n.dot(-light_dir), 0.0)
 
-                    # === Blinn-Phong 镜面反射 ===
+                    # === Blinn-Phong specular reflection ===
                     view_dir = -rd.normalized()
                     half_dir = (view_dir + -light_dir).normalized()
-                    spec = max(n.dot(half_dir), 0.0) ** 32   # shininess=32，越小越散，越大越锐
+                    spec = max(n.dot(half_dir), 0.0) ** 32   # shininess=32, smaller is more diffuse, larger is sharper
 
                     depth_factor = 1.0 - (p.z - depth_near) / (depth_far - znear)
                     depth_factor = ti.max(0.0, ti.min(1.0, depth_factor))
 
-                    # 原来的 diffuse/ambient 光照
+                    # Original diffuse/ambient lighting
                     diffuse_term = 0.3 + 0.7 * diff
                     base = col.xyz * diffuse_term * depth_factor
 
-                    # 镜面高光（叠加到原有结果上）
+                    # Specular highlight (added to original result)
                     highlight = ti.Vector([1.0, 1.0, 1.0]) * (0.5 * spec) * depth_factor
 
                     col_out = ti.Vector([base.x + highlight.x,
@@ -172,29 +172,29 @@ def render_whole(specs_list, H=480, W=640, fx=500, fy=500, cx=240, cy=320, radiu
 
 
 def random_cylinder():
-    """生成一根随机圆柱 (start, end, color)。"""
-    # 起点 [-200,200]^2, z 在 [-300,-100]
+    """Generate a random cylinder (start, end, color)."""
+    # Start point [-200,200]^2, z in [300,400]
     ax = random.uniform(-200, 200)
     ay = random.uniform(-200, 200)
     az = random.uniform(300, 400)
     start = [ax, ay, az]
 
-    # 随机方向和长度
+    # Random direction and length
     theta = random.uniform(0, 2*math.pi)
-    phi = random.uniform(-math.pi/4, math.pi/4)  # 倾斜角
+    phi = random.uniform(-math.pi/4, math.pi/4)  # Tilt angle
     L = 100
     dx = math.cos(phi) * math.cos(theta)
     dy = math.cos(phi) * math.sin(theta)
     dz = math.sin(phi)
     end = [ax + dx * L, ay + dy * L, az + dz * L]
 
-    # 随机颜色 (RGB + alpha=1)
+    # Random color (RGB + alpha=1)
     color = [random.random(), random.random(), random.random(), 1.0]
 
     return (start, end, color)
 
 def generate_specs_list(num_frames=120, min_cyl=10, max_cyl=120):
-    """生成 specs_list，每帧有若干随机圆柱."""
+    """Generate specs_list, each frame has several random cylinders."""
     specs_list = []
     for _ in range(num_frames):
         n_cyl = random.randint(min_cyl, max_cyl)

@@ -1,12 +1,38 @@
 # https://github.com/IDEA-Research/DWPose
 import math
 import numpy as np
-import matplotlib
 import cv2
 import random
 
 eps = 0.01
 
+def hsv_to_rgb(hsv):
+    hsv = np.asarray(hsv, dtype=np.float32)
+    in_shape = hsv.shape
+    hsv = hsv.reshape(-1, 3)
+
+    h, s, v = hsv[:, 0], hsv[:, 1], hsv[:, 2]
+
+    i = (h * 6.0).astype(int)
+    f = (h * 6.0) - i
+    i = i % 6
+
+    p = v * (1.0 - s)
+    q = v * (1.0 - s * f)
+    t = v * (1.0 - s * (1.0 - f))
+
+    rgb = np.zeros_like(hsv)
+    rgb[i == 0] = np.stack([v[i == 0], t[i == 0], p[i == 0]], axis=1)
+    rgb[i == 1] = np.stack([q[i == 1], v[i == 1], p[i == 1]], axis=1)
+    rgb[i == 2] = np.stack([p[i == 2], v[i == 2], t[i == 2]], axis=1)
+    rgb[i == 3] = np.stack([p[i == 3], q[i == 3], v[i == 3]], axis=1)
+    rgb[i == 4] = np.stack([t[i == 4], p[i == 4], v[i == 4]], axis=1)
+    rgb[i == 5] = np.stack([v[i == 5], p[i == 5], q[i == 5]], axis=1)
+
+    gray_mask = s == 0
+    rgb[gray_mask] = np.stack([v[gray_mask]] * 3, axis=1)
+
+    return (rgb.reshape(in_shape) * 255)
 
 def smart_resize(x, s):
     Ht, Wt = s
@@ -42,29 +68,6 @@ def smart_resize_k(x, fx, fy):
         )
     else:
         return np.stack([smart_resize_k(x[:, :, i], fx, fy) for i in range(Co)], axis=2)
-
-
-def padRightDownCorner(img, stride, padValue):
-    h = img.shape[0]
-    w = img.shape[1]
-
-    pad = 4 * [None]
-    pad[0] = 0  # up
-    pad[1] = 0  # left
-    pad[2] = 0 if (h % stride == 0) else stride - (h % stride)  # down
-    pad[3] = 0 if (w % stride == 0) else stride - (w % stride)  # right
-
-    img_padded = img
-    pad_up = np.tile(img_padded[0:1, :, :] * 0 + padValue, (pad[0], 1, 1))
-    img_padded = np.concatenate((pad_up, img_padded), axis=0)
-    pad_left = np.tile(img_padded[:, 0:1, :] * 0 + padValue, (1, pad[1], 1))
-    img_padded = np.concatenate((pad_left, img_padded), axis=1)
-    pad_down = np.tile(img_padded[-2:-1, :, :] * 0 + padValue, (pad[2], 1, 1))
-    img_padded = np.concatenate((img_padded, pad_down), axis=0)
-    pad_right = np.tile(img_padded[:, -2:-1, :] * 0 + padValue, (1, pad[3], 1))
-    img_padded = np.concatenate((img_padded, pad_right), axis=1)
-
-    return img_padded, pad
 
 
 def transfer(model, model_weights):
@@ -406,12 +409,11 @@ def draw_handpose_lr(canvas, all_hand_peaks):
                     hsv_color = [ (base_hue + ie / float(len(edges)) * 0.8), 0.9, 0.9 ]
                 else:
                     hsv_color = [ (base_hue + ie / float(len(edges)) * 0.8), 0.8, 1 ]
-                rgb_color = matplotlib.colors.hsv_to_rgb(hsv_color) * 255
                 cv2.line(
                     canvas,
                     (x1, y1),
                     (x2, y2),
-                    rgb_color,
+                    hsv_to_rgb(hsv_color),
                     thickness=2,
                 )
 
@@ -464,12 +466,13 @@ def draw_handpose(canvas, all_hand_peaks):
             x2 = int(x2 * W)
             y2 = int(y2 * H)
             if x1 > eps and y1 > eps and x2 > eps and y2 > eps:
+                rgb_color = hsv_to_rgb([ie / float(len(edges)), 1.0, 1.0])
+                rgb_color = tuple(int(c) for c in rgb_color)
                 cv2.line(
                     canvas,
                     (x1, y1),
                     (x2, y2),
-                    matplotlib.colors.hsv_to_rgb([ie / float(len(edges)), 1.0, 1.0])
-                    * 255,
+                    rgb_color,
                     thickness=stickwidth_thin,
                 )
 
@@ -500,159 +503,3 @@ def draw_facepose(canvas, all_lmks, optimized_face=True):
                 else:
                     cv2.circle(canvas, (x, y), stickwidth, (255, 255, 255), thickness=-1)
     return canvas
-
-
-
-
-
-# detect hand according to body pose keypoints
-# please refer to https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/src/openpose/hand/handDetector.cpp
-def handDetect(candidate, subset, oriImg):
-    # right hand: wrist 4, elbow 3, shoulder 2
-    # left hand: wrist 7, elbow 6, shoulder 5
-    ratioWristElbow = 0.33
-    detect_result = []
-    image_height, image_width = oriImg.shape[0:2]
-    for person in subset.astype(int):
-        # if any of three not detected
-        has_left = np.sum(person[[5, 6, 7]] == -1) == 0
-        has_right = np.sum(person[[2, 3, 4]] == -1) == 0
-        if not (has_left or has_right):
-            continue
-        hands = []
-        # left hand
-        if has_left:
-            left_shoulder_index, left_elbow_index, left_wrist_index = person[[5, 6, 7]]
-            x1, y1 = candidate[left_shoulder_index][:2]
-            x2, y2 = candidate[left_elbow_index][:2]
-            x3, y3 = candidate[left_wrist_index][:2]
-            hands.append([x1, y1, x2, y2, x3, y3, True])
-        # right hand
-        if has_right:
-            right_shoulder_index, right_elbow_index, right_wrist_index = person[
-                [2, 3, 4]
-            ]
-            x1, y1 = candidate[right_shoulder_index][:2]
-            x2, y2 = candidate[right_elbow_index][:2]
-            x3, y3 = candidate[right_wrist_index][:2]
-            hands.append([x1, y1, x2, y2, x3, y3, False])
-
-        for x1, y1, x2, y2, x3, y3, is_left in hands:
-            # pos_hand = pos_wrist + ratio * (pos_wrist - pos_elbox) = (1 + ratio) * pos_wrist - ratio * pos_elbox
-            # handRectangle.x = posePtr[wrist*3] + ratioWristElbow * (posePtr[wrist*3] - posePtr[elbow*3]);
-            # handRectangle.y = posePtr[wrist*3+1] + ratioWristElbow * (posePtr[wrist*3+1] - posePtr[elbow*3+1]);
-            # const auto distanceWristElbow = getDistance(poseKeypoints, person, wrist, elbow);
-            # const auto distanceElbowShoulder = getDistance(poseKeypoints, person, elbow, shoulder);
-            # handRectangle.width = 1.5f * fastMax(distanceWristElbow, 0.9f * distanceElbowShoulder);
-            x = x3 + ratioWristElbow * (x3 - x2)
-            y = y3 + ratioWristElbow * (y3 - y2)
-            distanceWristElbow = math.sqrt((x3 - x2) ** 2 + (y3 - y2) ** 2)
-            distanceElbowShoulder = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-            width = 1.5 * max(distanceWristElbow, 0.9 * distanceElbowShoulder)
-            # x-y refers to the center --> offset to topLeft point
-            # handRectangle.x -= handRectangle.width / 2.f;
-            # handRectangle.y -= handRectangle.height / 2.f;
-            x -= width / 2
-            y -= width / 2  # width = height
-            # overflow the image
-            if x < 0:
-                x = 0
-            if y < 0:
-                y = 0
-            width1 = width
-            width2 = width
-            if x + width > image_width:
-                width1 = image_width - x
-            if y + width > image_height:
-                width2 = image_height - y
-            width = min(width1, width2)
-            # the max hand box value is 20 pixels
-            if width >= 20:
-                detect_result.append([int(x), int(y), int(width), is_left])
-
-    """
-    return value: [[x, y, w, True if left hand else False]].
-    width=height since the network require squared input.
-    x, y is the coordinate of top left
-    """
-    return detect_result
-
-
-# Written by Lvmin
-def faceDetect(candidate, subset, oriImg):
-    # left right eye ear 14 15 16 17
-    detect_result = []
-    image_height, image_width = oriImg.shape[0:2]
-    for person in subset.astype(int):
-        has_head = person[0] > -1
-        if not has_head:
-            continue
-
-        has_left_eye = person[14] > -1
-        has_right_eye = person[15] > -1
-        has_left_ear = person[16] > -1
-        has_right_ear = person[17] > -1
-
-        if not (has_left_eye or has_right_eye or has_left_ear or has_right_ear):
-            continue
-
-        head, left_eye, right_eye, left_ear, right_ear = person[[0, 14, 15, 16, 17]]
-
-        width = 0.0
-        x0, y0 = candidate[head][:2]
-
-        if has_left_eye:
-            x1, y1 = candidate[left_eye][:2]
-            d = max(abs(x0 - x1), abs(y0 - y1))
-            width = max(width, d * 3.0)
-
-        if has_right_eye:
-            x1, y1 = candidate[right_eye][:2]
-            d = max(abs(x0 - x1), abs(y0 - y1))
-            width = max(width, d * 3.0)
-
-        if has_left_ear:
-            x1, y1 = candidate[left_ear][:2]
-            d = max(abs(x0 - x1), abs(y0 - y1))
-            width = max(width, d * 1.5)
-
-        if has_right_ear:
-            x1, y1 = candidate[right_ear][:2]
-            d = max(abs(x0 - x1), abs(y0 - y1))
-            width = max(width, d * 1.5)
-
-        x, y = x0, y0
-
-        x -= width
-        y -= width
-
-        if x < 0:
-            x = 0
-
-        if y < 0:
-            y = 0
-
-        width1 = width * 2
-        width2 = width * 2
-
-        if x + width > image_width:
-            width1 = image_width - x
-
-        if y + width > image_height:
-            width2 = image_height - y
-
-        width = min(width1, width2)
-
-        if width >= 20:
-            detect_result.append([int(x), int(y), int(width)])
-
-    return detect_result
-
-
-# get max index of 2d array
-def npmax(array):
-    arrayindex = array.argmax(1)
-    arrayvalue = array.max(1)
-    i = arrayvalue.argmax()
-    j = arrayindex[i]
-    return i, j
