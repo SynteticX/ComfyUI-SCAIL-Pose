@@ -102,7 +102,21 @@ def get_single_pose_cylinder_specs(args):
     cylinder_specs = []
 
     for joints3d in pose:  # 多人
-        joints3d = joints3d.cpu().numpy()
+        # Skip if None or not a valid tensor
+        if joints3d is None:
+            continue
+        if isinstance(joints3d, torch.Tensor):
+            # Check if it's an all-zero tensor (missing person)
+            if torch.sum(torch.abs(joints3d)) < 0.01:
+                continue
+            joints3d = joints3d.cpu().numpy()
+        elif isinstance(joints3d, np.ndarray):
+            # Check if it's an all-zero array (missing person)
+            if np.sum(np.abs(joints3d)) < 0.01:
+                continue
+        else:
+            continue
+
         joints3d = process_data_to_COCO_format(joints3d)
         for line_idx in draw_seq:
             line = limb_seq[line_idx]
@@ -408,25 +422,23 @@ def render_multi_nlf_as_images(smpl_poses, dw_poses, height, width, video_length
                 15, 16, # Nose -> L. Eye -> L. Ear
                 ]   # Expanding outward from the proximal end
 
-    colors_first = [[c / 300 + 0.15 for c in color_rgb] + [0.8] for color_rgb in ordered_colors_255_list[0]]
-    colors_second = [[c / 300 + 0.15 for c in color_rgb] + [0.8] for color_rgb in ordered_colors_255_list[1]]
+    # Determine max number of people across all frames
+    max_persons = max(len(frame) for frame in smpl_poses)
 
-    smpl_poses_first = []
-    smpl_poses_second = []
-    for i in range(video_length):
-        if len(smpl_poses[i]) >= 1:
-            smpl_poses_first.append([smpl_poses[i][0]])  # First person
-        else:
-            smpl_poses_first.append([torch.zeros((24, 3), dtype=torch.float32)])
+    # Align persons across frames
+    aligned = align_persons_across_frames(smpl_poses, max_persons=max_persons)
 
-        if len(smpl_poses[i]) >= 2:
-            smpl_poses_second.append([smpl_poses[i][1]])  # Second person
-        else:
-            smpl_poses_second.append([torch.zeros((24, 3), dtype=torch.float32)])
+    # Separate poses by person and assign colors (alternating between two color schemes)
+    smpl_poses_by_person = []
+    colors_by_person = []
+    for person_idx in range(max_persons):
+        person_poses = [[frame[person_idx]] for frame in aligned]
+        smpl_poses_by_person.append(person_poses)
 
-    aligned = align_persons_across_frames(smpl_poses, max_persons=2)
-    smpl_poses_first = [[frame[0]] for frame in aligned]
-    smpl_poses_second = [[frame[1]] for frame in aligned]
+        # Alternate colors between the two schemes
+        color_scheme_idx = person_idx % 2
+        colors = [[c / 300 + 0.15 for c in color_rgb] + [0.8] for color_rgb in ordered_colors_255_list[color_scheme_idx]]
+        colors_by_person.append(colors)
 
     if intrinsic_matrix is None:
         intrinsic_matrix = intrinsic_matrix_from_field_of_view((height, width))
@@ -437,9 +449,13 @@ def render_multi_nlf_as_images(smpl_poses, dw_poses, height, width, video_length
     # obtain cylinder_specs for each frame
     cylinder_specs_list = []
     for i in range(video_length):
-        cylinder_specs_first = get_single_pose_cylinder_specs((i, smpl_poses_first[i], None, None, None, None, colors_first, limb_seq, draw_seq))
-        cylinder_specs_second = get_single_pose_cylinder_specs((i, smpl_poses_second[i], None, None, None, None, colors_second, limb_seq, draw_seq))
-        cylinder_specs = cylinder_specs_first + cylinder_specs_second
+        cylinder_specs = []
+        for person_idx in range(max_persons):
+            person_specs = get_single_pose_cylinder_specs(
+                (i, smpl_poses_by_person[person_idx][i], None, None, None, None, 
+                 colors_by_person[person_idx], limb_seq, draw_seq)
+            )
+            cylinder_specs.extend(person_specs)
         cylinder_specs_list.append(cylinder_specs)
 
 
