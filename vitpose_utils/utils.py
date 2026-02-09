@@ -140,10 +140,8 @@ def _mask_by_threshold(coords, scores, threshold):
     mask = scores <= threshold
     if not np.any(mask):
         return coords, scores
-    coords_masked = coords.copy()
-    coords_masked[mask[..., None]] = -1
-    scores_masked = scores.copy()
-    scores_masked[mask] = -1
+    coords_masked = np.where(mask[..., None], -1, coords)
+    scores_masked = np.where(mask, -1, scores)
     return coords_masked, scores_masked
 
 
