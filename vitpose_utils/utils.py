@@ -133,7 +133,21 @@ def load_pose_metas_from_kp2ds_seq(kp2ds_seq, width, height):
         metas.append(meta)
     return metas
 
-def aaposemeta_to_dwpose_scail(meta, body_threshold=0.3):
+def _mask_by_threshold(coords, scores, threshold):
+    """Return copies with coords/scores set to -1 where score <= threshold."""
+    if threshold is None:
+        return coords, scores
+    mask = scores <= threshold
+    if not np.any(mask):
+        return coords, scores
+    coords_masked = coords.copy()
+    coords_masked[mask[..., None]] = -1
+    scores_masked = scores.copy()
+    scores_masked[mask] = -1
+    return coords_masked, scores_masked
+
+
+def aaposemeta_to_dwpose_scail(meta, body_threshold=0.3, hand_threshold=0.3, face_threshold=0.3):
     """
     Convert AA pose metadata to DWpose format matching DWposeDetector output.
 
@@ -141,6 +155,10 @@ def aaposemeta_to_dwpose_scail(meta, body_threshold=0.3):
     - bodies: dict with 'candidate' (n, 24, 2) and 'subset' (n, 24) where subset contains indices
     - hands: array (2*n, 21, 2) - stacked right/left hands
     - faces: array (n, 68, 2)
+
+    Thresholds:
+    - body_threshold controls which body indices stay in subset (<= threshold -> -1)
+    - hand_threshold and face_threshold zero-out coords/scores where confidence is too low
     """
     # Body keypoints (excluding last 2)
     candidate_body = meta['keypoints_body'][:-2][:, :2]  # (24, 2)
@@ -166,10 +184,12 @@ def aaposemeta_to_dwpose_scail(meta, body_threshold=0.3):
         meta['keypoints_right_hand'][:, 2],
         meta['keypoints_left_hand'][:, 2]
     ], axis=0)
+    hands_coords, hands_score = _mask_by_threshold(hands_coords, hands_score, hand_threshold)
 
     # Faces: (1, 68, 2) - skip first face keypoint like DWpose does (24:92 = 68 points)
     faces_coords = np.expand_dims(meta['keypoints_face'][1:][:, :2], axis=0)
     faces_score = np.expand_dims(meta['keypoints_face'][1:][:, 2], axis=0)
+    faces_coords, faces_score = _mask_by_threshold(faces_coords, faces_score, face_threshold)
 
     # Match DWpose output structure
     dwpose_format = {
