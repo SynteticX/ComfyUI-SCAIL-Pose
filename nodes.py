@@ -149,6 +149,7 @@ class PoseDetectionVitPoseToDWPose:
             "required": {
                 "vitpose_model": ("POSEMODEL",),
                 "images": ("IMAGE",),
+                "threshold": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Visibility score required for a keypoint to be kept"}),
             },
         }
 
@@ -158,7 +159,7 @@ class PoseDetectionVitPoseToDWPose:
     CATEGORY = "WanAnimatePreprocess"
     DESCRIPTION = "ViTPose to DWPose format pose detection node."
 
-    def process(self, vitpose_model, images):
+    def process(self, vitpose_model, images, threshold=0.3):
 
         detector = vitpose_model["yolo"]
         pose_model = vitpose_model["vitpose"]
@@ -211,7 +212,7 @@ class PoseDetectionVitPoseToDWPose:
 
         kp2ds = np.concatenate(kp2ds, 0)
         pose_metas = load_pose_metas_from_kp2ds_seq(kp2ds, width=W, height=H)
-        dwposes = [aaposemeta_to_dwpose_scail(meta) for meta in pose_metas]
+        dwposes = [aaposemeta_to_dwpose_scail(meta, threshold) for meta in pose_metas]
         swap_hands = True
         out_dict = {"poses": dwposes, "swap_hands": swap_hands}
         return out_dict,

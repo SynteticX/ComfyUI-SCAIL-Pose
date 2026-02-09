@@ -133,7 +133,7 @@ def load_pose_metas_from_kp2ds_seq(kp2ds_seq, width, height):
         metas.append(meta)
     return metas
 
-def aaposemeta_to_dwpose_scail(meta):
+def aaposemeta_to_dwpose_scail(meta, body_threshold=0.3):
     """
     Convert AA pose metadata to DWpose format matching DWposeDetector output.
 
@@ -148,7 +148,7 @@ def aaposemeta_to_dwpose_scail(meta):
 
     # Create subset: contains joint index if visible, -1 if not
     subset_body = np.arange(len(candidate_body), dtype=float)
-    subset_body[score_body <= 0.3] = -1  # Match DWpose threshold
+    subset_body[score_body <= body_threshold] = -1  # Match DWpose threshold
 
     # Bodies dict with single person (expand to match multi-person format)
     bodies = {
