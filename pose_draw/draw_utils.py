@@ -392,9 +392,9 @@ def draw_handpose_lr(canvas, all_hand_peaks):
     ]
 
     all_num_hands = len(all_hand_peaks)
+    finger_color = (0, 165, 255)  # vivid orange in BGR for high contrast
     for peaks_idx, peaks in enumerate(all_hand_peaks):
         left_or_right = not (peaks_idx >= all_num_hands / 2)
-        base_hue = 0 if left_or_right == 0 else 0.3
         peaks = np.array(peaks)
 
         for ie, e in enumerate(edges):
@@ -405,15 +405,11 @@ def draw_handpose_lr(canvas, all_hand_peaks):
             x2 = int(x2 * W)
             y2 = int(y2 * H)
             if x1 > eps and y1 > eps and x2 > eps and y2 > eps:
-                if left_or_right == 0:
-                    hsv_color = [ (base_hue + ie / float(len(edges)) * 0.8), 0.9, 0.9 ]
-                else:
-                    hsv_color = [ (base_hue + ie / float(len(edges)) * 0.8), 0.8, 1 ]
                 cv2.line(
                     canvas,
                     (x1, y1),
                     (x2, y2),
-                    hsv_to_rgb(hsv_color),
+                    finger_color,
                     thickness=2,
                 )
 
@@ -422,9 +418,7 @@ def draw_handpose_lr(canvas, all_hand_peaks):
             x = int(x * W)
             y = int(y * H)
             if x > eps and y > eps:
-                # 关键点也用淡色标注（左手改为暖色以避免与蓝色身体混淆）
-                point_color = (60, 170, 255) if left_or_right == 0 else (100, 100, 255)
-                cv2.circle(canvas, (x, y), 4, point_color, thickness=-1)
+                cv2.circle(canvas, (x, y), 4, finger_color, thickness=-1)
 
     return canvas
 
@@ -456,11 +450,9 @@ def draw_handpose(canvas, all_hand_peaks):
     ]
 
     total_hands = len(all_hand_peaks)
+    finger_color = (0, 165, 255)
     for peaks_idx, peaks in enumerate(all_hand_peaks):
         peaks = np.array(peaks)
-        is_left_hand = not (peaks_idx >= total_hands / 2)
-        # Warm pastel dots for fingertips make them readable atop the blue body
-        point_color = (70, 200, 255) if is_left_hand else (200, 160, 255)
 
         for ie, e in enumerate(edges):
             x1, y1 = peaks[e[0]]
@@ -470,13 +462,11 @@ def draw_handpose(canvas, all_hand_peaks):
             x2 = int(x2 * W)
             y2 = int(y2 * H)
             if x1 > eps and y1 > eps and x2 > eps and y2 > eps:
-                rgb_color = hsv_to_rgb([ie / float(len(edges)), 1.0, 1.0])
-                rgb_color = tuple(int(c) for c in rgb_color)
                 cv2.line(
                     canvas,
                     (x1, y1),
                     (x2, y2),
-                    rgb_color,
+                    finger_color,
                     thickness=stickwidth_thin,
                 )
 
@@ -485,7 +475,7 @@ def draw_handpose(canvas, all_hand_peaks):
             x = int(x * W)
             y = int(y * H)
             if x > eps and y > eps:
-                cv2.circle(canvas, (x, y), stickwidth_thin, point_color, thickness=-1)
+                cv2.circle(canvas, (x, y), stickwidth_thin, finger_color, thickness=-1)
     return canvas
 
 
