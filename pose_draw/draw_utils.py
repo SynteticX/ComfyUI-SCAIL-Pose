@@ -455,8 +455,12 @@ def draw_handpose(canvas, all_hand_peaks):
         [19, 20],
     ]
 
-    for peaks in all_hand_peaks:
+    total_hands = len(all_hand_peaks)
+    for peaks_idx, peaks in enumerate(all_hand_peaks):
         peaks = np.array(peaks)
+        is_left_hand = not (peaks_idx >= total_hands / 2)
+        # Warm pastel dots for fingertips make them readable atop the blue body
+        point_color = (70, 200, 255) if is_left_hand else (200, 160, 255)
 
         for ie, e in enumerate(edges):
             x1, y1 = peaks[e[0]]
@@ -476,12 +480,12 @@ def draw_handpose(canvas, all_hand_peaks):
                     thickness=stickwidth_thin,
                 )
 
-        for i, keyponit in enumerate(peaks):
-            x, y = keyponit
+        for keypoint in peaks:
+            x, y = keypoint
             x = int(x * W)
             y = int(y * H)
             if x > eps and y > eps:
-                cv2.circle(canvas, (x, y), stickwidth_thin, (0, 0, 255), thickness=-1)
+                cv2.circle(canvas, (x, y), stickwidth_thin, point_color, thickness=-1)
     return canvas
 
 

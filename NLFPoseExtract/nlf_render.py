@@ -53,6 +53,15 @@ def process_data_to_COCO_format(joints):
 
     return new_joints
 
+
+def pastelize_palette(rgb_colors, blend=0.35):
+    """Lighten colors by blending toward white to keep the body distinct from the background."""
+    blend = max(0.0, min(1.0, blend))
+    pastel_colors = []
+    for color in rgb_colors:
+        pastel_colors.append([int(c + (255 - c) * blend) for c in color])
+    return pastel_colors
+
 def intrinsic_matrix_from_field_of_view(imshape, fov_degrees:float =55):   # nlf default fov_degrees 55
     imshape = np.array(imshape)
     fov_radians = fov_degrees * np.array(np.pi / 180)
@@ -240,6 +249,8 @@ def render_nlf_as_images(smpl_poses, dw_poses, height, width, video_length, intr
         base_colors_255_dict["Dark Violet"],      # L. Eye -> L. Ear (Dark Violet)
     ]
 
+    ordered_colors_255 = pastelize_palette(ordered_colors_255, blend=0.4)
+
     limb_seq = [
         [1, 2],    # 0 Neck -> R. Shoulder
         [1, 5],    # 1 Neck -> L. Shoulder
@@ -423,6 +434,8 @@ def get_cylinder_specs_list_from_poses(smpl_poses, include_missing=False):
         # base_colors_255_dict["Pink-Magenta"],           # Nose -> L. Eye (Violet)
         # base_colors_255_dict["Dark Violet"],      # L. Eye -> L. Ear (Dark Violet)
     ] for base_colors_255_dict in base_colors_255_dict_list]
+
+    ordered_colors_255_list = [pastelize_palette(colors, blend=0.4) for colors in ordered_colors_255_list]
 
     limb_seq = [
         [1, 2],    # 0 Neck -> R. Shoulder
