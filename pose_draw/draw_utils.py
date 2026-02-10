@@ -422,8 +422,8 @@ def draw_handpose_lr(canvas, all_hand_peaks):
             x = int(x * W)
             y = int(y * H)
             if x > eps and y > eps:
-                # 关键点也用淡色标注（左手蓝、右手红）
-                point_color = (245, 100, 100) if left_or_right == 0 else (100, 100, 255)
+                # 关键点也用淡色标注（左手改为暖色以避免与蓝色身体混淆）
+                point_color = (60, 170, 255) if left_or_right == 0 else (100, 100, 255)
                 cv2.circle(canvas, (x, y), 4, point_color, thickness=-1)
 
     return canvas
